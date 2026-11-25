@@ -225,6 +225,9 @@ body.in-sub .brand .back-arrow{width:22px;opacity:1}
 
 .itemhead{margin-top:26px}
 .itemhead .big{font-size:26px;margin-top:8px}
+.endscore{margin-top:10px;font-size:14px;color:var(--text)}
+.endscore b{font-family:var(--font-display);font-size:30px;font-weight:600;margin-right:4px}
+.endbtns{display:flex;justify-content:center;gap:10px;margin-top:20px}
 /* footer */
 .foot{margin-top:72px;padding-top:24px;border-top:1px solid var(--border);display:grid;gap:8px;color:var(--text-sub);font-size:12px;line-height:1.7}
 .foot p{margin:0}
@@ -325,7 +328,7 @@ function scopeText(){const c=st.cats.length===5?'全ジャンル':st.cats.map(k=
 
 /* routing */
 const VIEWS={home:'',memo:'暗記カード',quiz:'問題',study:'学習リスト',item:'解説'};
-function go(v){st.view=v;save();deck=null;qcur=null;render();scrollTo({top:0})}
+function go(v){st.view=v;save();deck=null;qcur=null;qdeck=null;render();scrollTo({top:0})}
 $('#brand').onclick=()=>{if(st.view!=='home')go('home')};
 function render(){
   document.body.classList.toggle('in-sub',st.view!=='home');
@@ -413,7 +416,7 @@ function renderMemo(){
 }
 
 /* ===== 問題 ===== */
-let qcur=null,qn=0,qok=0;
+let qcur=null,qn=0,qok=0,qdeck=null,qi=0;
 function tokens(it){const t=new Set();const add=s=>{if(s&&s.length>=2)t.add(s)};add(it.rb);add(it.rt);
   (it.rb||'').split(/[-\s・]/).forEach(x=>x.length>=3&&add(x));(it.rt||'').split('・').forEach(x=>x.length>=2&&add(x));
   const core=it.n.replace(/（.*?）/g,'');add(core);return [...t].sort((a,b)=>b.length-a.length)}
@@ -421,10 +424,11 @@ function maskSegs(segs,it){const tk=tokens(it);return segs.map(([s,f])=>{let x=s
 const fieldOf=(it,m)=>m==='x'?it.x:m==='t'?it.t:it.p;
 function firstCh(it){return (it.fld||'').split('、')[0].replace(/\(.*/,'')}
 function makeQ(){
-  const m=st.qmode;let P=pool().filter(it=>has(fieldOf(it,m==='r'?'p':m))&&(m==='p'||m==='r'||it.k==='D'));
-  if(!P.length)return null;
-  const weak=shuffle(P).sort((a,b)=>WEAK[R[a.id]||'none']-WEAK[R[b.id]||'none']);
-  const it=Math.random()<.6?weak[Math.floor(Math.random()*Math.max(1,Math.ceil(weak.length/3)))]:P[Math.random()*P.length|0];
+  const m=st.qmode;
+  if(!qdeck){const P=pool().filter(it=>has(fieldOf(it,m==='r'?'p':m))&&(m==='p'||m==='r'||it.k==='D'));
+    if(!P.length)return null;qdeck=shuffle(P);qi=0;qn=0;qok=0}
+  if(qi>=qdeck.length)return 'end';
+  const it=qdeck[qi];
   const fm=m==='r'?'p':m;
   let cand=DATA.filter(o=>o.id!==it.id&&has(fieldOf(o,fm))&&(fm==='p'?o.k===it.k:o.k==='D'));
   const same=shuffle(cand.filter(o=>firstCh(o)===firstCh(it))),other=shuffle(cand.filter(o=>firstCh(o)!==firstCh(it)));
@@ -435,8 +439,12 @@ function renderQuiz(){
   const v=$('#view');v.innerHTML='';
   if(!qcur)qcur=makeQ();
   if(!qcur){v.innerHTML='<div class="empty">この範囲で出せる問題がありません<small>検査・治療の問題は「疾患」が対象です。ホームの「範囲」を見直してください</small></div>';return}
+  if(qcur==='end'){qcur=null;
+    v.innerHTML=`<div class="empty fade" style="margin-top:28px">1周終わりました<div class="endscore"><b>${qok}</b> / ${qn} 問正解</div>${qn<qdeck.length?`<small>スキップ ${qdeck.length-qn}問</small>`:''}
+      <div class="endbtns"><button class="btn line" id="qhome">ホームへ</button><button class="btn" id="qagain">もう一周<span class="ms">replay</span></button></div></div>`;
+    $('#qhome').onclick=()=>go('home');$('#qagain').onclick=()=>{qdeck=null;renderQuiz();scrollTo({top:0})};return}
   const q=qcur,it=q.it,fm=q.m==='r'?'p':q.m;const lab={p:it.k==='D'?'病態・概要':'説明',x:'検査・所見',t:'治療'}[fm];
-  v.insertAdjacentHTML('beforeend',`<div class="progress"><span class="meta-line"><span class="d"></span>${catName(it.k)}</span><span class="score">${qn?`${qok} / ${qn} 問正解`:''}</span></div>`);
+  v.insertAdjacentHTML('beforeend',`<div class="progress"><span><b>${qi+1}</b> / ${qdeck.length} 問</span><span class="score">${qn?`${qok} / ${qn} 問正解`:''}</span></div><div class="pbar"><i style="width:${(qi+1)/qdeck.length*100}%"></i></div>`);
   const stem=document.createElement('div');stem.className='stem'+(q.anim?'':' fade');q.anim=1;
   const ask=q.m==='r'?`次の${lab}にあてはまるのはどれか。`:`${lab}として正しいのはどれか。`;
   stem.innerHTML=pillHTML(it)+(q.m==='r'?`<div class="ask" style="margin-top:10px">${ask}</div><div class="qtext">${segHTML(maskSegs(it.p,it))}</div>`:`<div class="big" style="margin-top:8px">${nameHTML(it)}${it.sub?`<div class="sub">${esc(it.sub)}</div>`:''}</div><div class="ask" style="margin:12px 0 0">${ask}</div>`);
@@ -457,10 +465,10 @@ function renderQuiz(){
     v.insertAdjacentHTML('beforeend','<div class="ratelab">自己評価</div>');
     v.appendChild(ratingBar(it))}
   const nav=document.createElement('div');nav.className='nav';
-  nav.innerHTML=q.done?`<span></span><button class="btn" id="qn">次の問題<span class="ms">arrow_forward</span></button>`:`<button class="btn line" id="qs">スキップ</button><button class="btn" id="qa" ${q.sel==null?'disabled':''}>解答する</button>`;
+  nav.innerHTML=q.done?`<span></span><button class="btn" id="qn">${qi+1>=qdeck.length?'結果を見る':'次の問題'}<span class="ms">arrow_forward</span></button>`:`<button class="btn line" id="qs">スキップ</button><button class="btn" id="qa" ${q.sel==null?'disabled':''}>解答する</button>`;
   v.appendChild(nav);
-  if(q.done)$('#qn').onclick=()=>{qcur=null;renderQuiz();scrollTo({top:0,behavior:'smooth'})};
-  else{$('#qs').onclick=()=>{qcur=null;renderQuiz()};$('#qa').onclick=()=>{if(q.sel==null)return;q.done=true;const ok=q.opts[q.sel]===it;qn++;if(ok)qok++;R[it.id]=ok?'o':'x';saveR();renderQuiz()}}
+  if(q.done)$('#qn').onclick=()=>{qi++;qcur=null;renderQuiz();scrollTo({top:0,behavior:'smooth'})};
+  else{$('#qs').onclick=()=>{qi++;qcur=null;renderQuiz()};$('#qa').onclick=()=>{if(q.sel==null)return;q.done=true;const ok=q.opts[q.sel]===it;qn++;if(ok)qok++;R[it.id]=ok?'o':'x';saveR();renderQuiz()}}
 }
 
 /* ===== 学習 ===== */
